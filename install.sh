@@ -16,28 +16,19 @@ fi
 echo -e "${C}[*] updating packages...${N}"
 $PKG update -y && $PKG upgrade -y
 
-echo -e "${C}[*] installing python, wget, curl...${N}"
-$PKG install python wget curl -y
+echo -e "${C}[*] installing python, nodejs, wget, curl...${N}"
+$PKG install python nodejs wget curl -y
 
 echo -e "${C}[*] installing python deps (flask, requests, qrcode)...${N}"
 pip install flask requests qrcode --quiet
 
-# cloudflared
-if [ ! -f "cloudflared" ]; then
-    echo -e "${C}[*] downloading cloudflared binary...${N}"
-    ARCH=$(uname -m)
-    case "$ARCH" in
-        aarch64|arm64) CF_ARCH="arm64" ;;
-        armv7l|arm)    CF_ARCH="arm" ;;
-        x86_64|amd64)  CF_ARCH="amd64" ;;
-        *)             CF_ARCH="arm64" ;;
-    esac
-    echo -e "${Y}[*] arch: $ARCH → cloudflared-linux-$CF_ARCH${N}"
-    wget -q "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-$CF_ARCH" -O cloudflared
-    chmod +x cloudflared
-    echo -e "${G}[+] cloudflared installed${N}"
+# localtunnel
+if ! command -v lt >/dev/null 2>&1; then
+    echo -e "${C}[*] installing localtunnel via npm...${N}"
+    npm install -g localtunnel
+    echo -e "${G}[+] localtunnel installed${N}"
 else
-    echo -e "${G}[+] cloudflared already present${N}"
+    echo -e "${G}[+] localtunnel already present${N}"
 fi
 
 chmod +x nyxphish.py
