@@ -31,6 +31,14 @@ else
     echo -e "${G}[+] localtunnel already present${N}"
 fi
 
+# patch openurl — crashes on android/termux ("Unsupported platform")
+# nyxphish uses nyxtunnel.js (lib API) instead, but patch lt anyway for manual use
+OPENURL="$(npm root -g)/localtunnel/node_modules/openurl/openurl.js"
+if [ -f "$OPENURL" ] && grep -q "Unsupported platform" "$OPENURL"; then
+    sed -i "s|throw new Error('Unsupported platform: ' + process.platform);|return; /* patched for android */|" "$OPENURL"
+    echo -e "${G}[+] openurl patched for android/termux${N}"
+fi
+
 chmod +x nyxphish.py
 
 echo ""

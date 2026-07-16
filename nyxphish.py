@@ -203,9 +203,13 @@ def assets(filename):
 
 # ---------- tunneling ----------
 def lt_cmd(port):
-    """return the best available localtunnel command, or None"""
+    """return the best available localtunnel command, or None.
+    prefers nyxtunnel.js (lib API) — the official lt binary crashes on
+    termux because its openurl dependency rejects the android platform."""
     import shutil
+    node = shutil.which("node") or "/data/data/com.termux/files/usr/bin/node"
     cands = [
+        [node, os.path.join(BASE_DIR, "nyxtunnel.js")],
         [os.path.join(BASE_DIR, "node_modules", ".bin", "lt")],
         ["/data/data/com.termux/files/usr/bin/lt"],
         [shutil.which("lt") or ""],
@@ -213,7 +217,9 @@ def lt_cmd(port):
     ]
     for base in cands:
         if base[0] and os.path.exists(base[0]):
-            return base + ["--port", str(port)]
+            if base[0].endswith("lt") or "npx" in base[0]:
+                return base + ["--port", str(port)]
+            return base + [str(port)]
     return None
 
 def start_tunnel(port):
