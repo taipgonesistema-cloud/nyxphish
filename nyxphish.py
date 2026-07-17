@@ -254,8 +254,14 @@ def spawn_tunnel(backend, port):
                          daemon=True)
     t.start()
     try:
+        env = dict(os.environ)
+        if backend == "cloudflared":
+            # termux/android fix (cloudflared issue #1684): Go's pure resolver
+            # queries [::1]:53 and gets connection refused on android.
+            # netdns=cgo forces the android/bionic resolver instead.
+            env["GODEBUG"] = "netdns=cgo"
         proc = subprocess.Popen(cmd, stdout=subprocess.PIPE,
-                                stderr=subprocess.STDOUT, text=True)
+                                stderr=subprocess.STDOUT, text=True, env=env)
     except Exception as e:
         done.set(); t.join()
         return None, str(e)
