@@ -239,6 +239,8 @@ URL_PATTERNS = [
     r"https://(?!api\.)[-a-z0-9]+\.trycloudflare\.com",
     r"https://(?!admin\.)[-a-z0-9]+\.lhr\.life",
     r"https://[a-z0-9-]+\.loca\.lt",
+    # some termux cloudflared builds print the bare host, no scheme
+    r"(?<![/.-])\b(?!api\.)[-a-z0-9]{4,}\.trycloudflare\.com\b",
 ]
 
 def spawn_tunnel(backend, port):
@@ -258,24 +260,36 @@ def spawn_tunnel(backend, port):
         done.set(); t.join()
         return None, str(e)
     url_found = None
+    raw = []
     start = time.time()
-    while time.time() - start < 45:
+    while time.time() - start < 90:
         line = proc.stdout.readline()
         if not line:
             if proc.poll() is not None:
+                raw.append(f"[process exited with code {proc.returncode}]")
                 break
             continue
+        raw.append(line.rstrip())
         for pat in URL_PATTERNS:
             m = re.search(pat, line)
             if m:
                 url_found = m.group(0)
+                if not url_found.startswith("http"):
+                    url_found = "https://" + url_found
                 break
         if url_found:
             break
     done.set(); t.join()
     if not url_found:
         proc.terminate()
-        return None, "timeout/no url"
+        # save raw output for debugging — this is gold on weird devices
+        dbg = os.path.join(BASE_DIR, "tunnel_debug.log")
+        with open(dbg, "a") as f:
+            f.write(f"\n===== {backend} @ {datetime.now()} =====\n")
+            f.write("cmd: " + " ".join(cmd) + "\n")
+            f.write("\n".join(raw[-25:]) + "\n")
+        tail = " | ".join(l.strip()[:80] for l in raw[-3:] if l.strip())
+        return None, f"timeout/no url (debug saved to tunnel_debug.log){' — last: ' + tail if tail else ''}"
     return url_found, proc
 
 def start_tunnel(port):
