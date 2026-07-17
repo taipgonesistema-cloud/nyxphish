@@ -234,8 +234,10 @@ def tunnel_cmd(backend, port):
     return None
 
 URL_PATTERNS = [
-    r"https://[-a-z0-9]+\.trycloudflare\.com",
-    r"https://[-a-z0-9]+\.lhr\.life",
+    # negative lookahead: cloudflared logs its control endpoint
+    # "api.trycloudflare.com" during startup — that is NOT your tunnel
+    r"https://(?!api\.)[-a-z0-9]+\.trycloudflare\.com",
+    r"https://(?!admin\.)[-a-z0-9]+\.lhr\.life",
     r"https://[a-z0-9-]+\.loca\.lt",
 ]
 
