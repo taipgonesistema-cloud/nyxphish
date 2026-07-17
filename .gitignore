@@ -1,0 +1,6 @@
+# never commit secrets or loot
+config.json
+captured/
+tunnel_debug.log
+cloudflared
+__pycache__/
