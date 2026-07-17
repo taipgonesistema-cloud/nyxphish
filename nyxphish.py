@@ -294,7 +294,7 @@ def spawn_tunnel(backend, port):
             f.write(f"\n===== {backend} @ {datetime.now()} =====\n")
             f.write("cmd: " + " ".join(cmd) + "\n")
             f.write("\n".join(raw[-25:]) + "\n")
-        tail = " | ".join(l.strip()[:80] for l in raw[-3:] if l.strip())
+        tail = " | ".join(l.strip()[:200] for l in raw[-3:] if l.strip())
         return None, f"timeout/no url (debug saved to tunnel_debug.log){' — last: ' + tail if tail else ''}"
     return url_found, proc
 
