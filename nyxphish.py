@@ -212,13 +212,19 @@ def tunnel_cmd(backend, port):
     """build command for a backend, or None if not available"""
     import shutil
     if backend == "cloudflared":
-        local = os.path.join(BASE_DIR, "cloudflared")
-        bin_ = local if os.path.exists(local) else shutil.which("cloudflared")
-        if not bin_:
-            bin_ = "/data/data/com.termux/files/usr/bin/cloudflared"
-        if os.path.exists(bin_):
-            return [bin_, "tunnel", "--url", f"http://localhost:{port}",
-                    "--no-autoupdate"]
+        # PREFER the termux pkg build: it's patched to read $PREFIX/etc/hosts,
+        # which is where our dns fix lives. the official github binary reads
+        # /etc/hosts literally (missing on android) and hits [::1]:53 -> dead.
+        cands = [
+            os.path.join(os.environ.get("PREFIX", ""), "bin", "cloudflared"),
+            "/data/data/com.termux/files/usr/bin/cloudflared",
+            shutil.which("cloudflared") or "",
+            os.path.join(BASE_DIR, "cloudflared"),  # official binary: last resort
+        ]
+        for bin_ in cands:
+            if bin_ and os.path.exists(bin_):
+                return [bin_, "tunnel", "--url", f"http://localhost:{port}",
+                        "--no-autoupdate"]
     elif backend == "localhost.run":
         ssh = shutil.which("ssh") or "/data/data/com.termux/files/usr/bin/ssh"
         if os.path.exists(ssh):
