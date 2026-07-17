@@ -296,18 +296,28 @@ def start_tunnel(port):
     chosen = None
     url = None
     proc = None
+    attempts = {"cloudflared": 3, "localhost.run": 2, "localtunnel": 1}
     for backend in TUNNEL_BACKENDS:
-        url, result = spawn_tunnel(backend, port)
+        for attempt in range(attempts.get(backend, 1)):
+            if attempt > 0:
+                print(f"{D}    {backend}: retry {attempt+1}/{attempts[backend]}...{N}")
+                time.sleep(3)
+            url, result = spawn_tunnel(backend, port)
+            if url:
+                chosen = backend
+                proc = result
+                break
+            else:
+                print(f"{D}    {backend}: {result}{N}")
         if url:
-            chosen = backend
-            proc = result
             break
-        else:
-            print(f"{D}    {backend}: {result}{N}")
     if not url:
-        print(f"{R}[!] all tunnel backends failed.{N}")
-        print(f"    termux fix: {W}pkg install cloudflared openssh{N}")
-        print(f"    or run:     {W}bash install.sh{N}")
+        print(f"\n{R}[!] all tunnel backends failed.{N}")
+        print(f"{Y}    quick fixes to try:{N}")
+        print(f"    1. toggle airplane mode / switch wifi ↔ mobile data")
+        print(f"    2. {W}pkg install resolv-conf{N} then restart termux (dns fix)")
+        print(f"    3. just run it again — quick tunnels fail randomly sometimes")
+        print(f"    4. full log: {W}cat tunnel_debug.log{N}")
         sys.exit(1)
 
     STATE["tunnel_url"] = url
