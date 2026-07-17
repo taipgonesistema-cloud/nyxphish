@@ -298,10 +298,37 @@ def spawn_tunnel(backend, port):
         return None, f"timeout/no url (debug saved to tunnel_debug.log){' — last: ' + tail if tail else ''}"
     return url_found, proc
 
+def ensure_cloudflared_dns_fix():
+    """termux/android workaround for cloudflared issue #1684:
+    Go's pure resolver ignores resolv.conf on android and queries [::1]:53
+    (connection refused), but /etc/hosts IS honored. hardcode the api ip."""
+    prefix = os.environ.get("PREFIX", "/data/data/com.termux/files/usr")
+    hosts = os.path.join(prefix, "etc", "hosts")
+    if not os.path.isdir(os.path.join(prefix, "etc")):
+        return  # not termux
+    try:
+        try:
+            with open(hosts) as f:
+                if "api.trycloudflare.com" in f.read():
+                    return  # already fixed
+        except FileNotFoundError:
+            pass
+        # resolve fresh if possible, fall back to known anycast ip
+        ip = "104.16.230.132"
+        try:
+            ip = socket.gethostbyname("api.trycloudflare.com")
+        except Exception:
+            pass
+        with open(hosts, "a") as f:
+            f.write(f"{ip} api.trycloudflare.com\n")
+    except Exception:
+        pass
+
 def start_tunnel(port):
     chosen = None
     url = None
     proc = None
+    ensure_cloudflared_dns_fix()
     attempts = {"cloudflared": 3, "localhost.run": 2, "localtunnel": 1}
     for backend in TUNNEL_BACKENDS:
         for attempt in range(attempts.get(backend, 1)):
